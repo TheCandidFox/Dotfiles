@@ -1,29 +1,74 @@
 #!/bin/bash
 
-# Usage: http view <filename.html>
-# Description: Starts a server (if needed) and opens the HTML file
+# Description: HTTP utility tool
+# Usage:
+#   http view <filename.html>    # starts server and opens file
+#   http stop                    # stops server on default port
 
-if [ "$1" != "view" ]; then
-  echo "Usage: http view <filename.html>"
-  exit 1
-fi
-
-filename="$2"
 port=8000
 
-# Check if the server is already running
-if ! lsof -i :$port >/dev/null 2>&1; then
-  echo "Starting Python HTTP server on port $port..."
-  nohup python -m http.server $port > /dev/null 2>&1 &
-  sleep 1
-else
-  echo "Server already running on port $port"
-fi
+# OS Detection (macOS and Git Bash only)
+OS="$(uname -s)"
+case "$OS" in
+  Darwin)
+    BROWSER_OPEN_CMD="open"
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    BROWSER_OPEN_CMD="start"
+    ;;
+  *)
+    echo "⚠️ Unsupported OS: $OS"
+    exit 1
+    ;;
+esac
 
-# Open the file in the browser
-if [ -n "$filename" ]; then
-  echo "Opening http://localhost:$port/$filename"
-  start "http://localhost:$port/$filename"
-else
-  echo "Usage: http view <filename.html>"
-fi
+case "$1" in
+  view)
+    filename="$2"
+    if ! lsof -i :$port >/dev/null 2>&1; then
+      echo "Starting Python HTTP server on port $port..."
+      nohup python -m http.server $port > /dev/null 2>&1 &
+      sleep 1
+    else
+      echo "Server already running on port $port"
+    fi
+
+    if [ -n "$filename" ]; then
+      echo "Opening http://localhost:$port/$filename"
+      $BROWSER_OPEN_CMD "http://localhost:$port/$filename" 2>/dev/null
+    else
+      echo "Usage: http view <filename.html>"
+    fi
+    ;;
+
+  stop)
+    echo "Attempting to stop Python HTTP server on port $port..."
+    pid=$(lsof -ti tcp:$port)
+
+    if [ -n "$pid" ]; then
+      kill "$pid"
+      echo "✅ Server on port $port stopped (PID $pid)."
+    else
+      echo "No process found with lsof — trying fallback..."
+      pid=$(ps aux | grep "[p]ython -m http.server $port" | awk '{print $2}')
+      if [ -n "$pid" ]; then
+        kill "$pid"
+        echo "✅ Fallback killed server with PID $pid."
+      else
+        echo "⚠️ Could not find server to stop. It may already be gone, or running under a different context."
+      fi
+    fi
+    ;;
+
+  help|--help|-h|"")
+    echo "Usage:"
+    echo "  http view <filename.html>    # start server and open file"
+    echo "  http stop                    # stop server on port $port"
+    echo "  http help                    # show this message"
+    ;;
+
+  *)
+    echo "Unknown command: $1"
+    echo "Run 'http help' for usage."
+    ;;
+esac
