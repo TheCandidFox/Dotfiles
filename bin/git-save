@@ -34,7 +34,7 @@ perform_git_commit_and_push() {
 }
 
 # --- Step 0: Setup ---
-REPOS_WITH_PERMISSIBLE_SHORTCUTS=("dotfiles" "Template")
+REPOS_WITH_PERMISSIBLE_SHORTCUTS=("Dotfiles" "Template")
 ORIGINAL_DIR="$PWD"
 
 # --- Step 1: Shortcut for permissible shortcut repos ---
