@@ -1,0 +1,6 @@
+# alias gs='git status'
+# alias gl='git log --oneline --graph --all'
+# alias v='code .'
+# alias py='python3'
+# alias ..='cd ..'
+# alias ...='cd ../..'
