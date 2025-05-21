@@ -14,12 +14,10 @@ perform_git_commit_and_push() {
 
 	# --- Step 2: Prompt for commit message ---
 	read -rp "Enter commit message: " COMMIT_MSG
-    echo ""
 	[[ -z "$COMMIT_MSG" ]] && echo "❌ Commit message cannot be empty." && exit 1
 
 	# --- Step 3: Attempt commit ---
 	COMMIT_OUTPUT=$(git commit -m "$COMMIT_MSG" 2>&1)
-    echo ""
 
 	if echo "$COMMIT_OUTPUT" | grep -q "nothing to commit"; then
 		echo "✅ No changes required – working tree clean."
@@ -27,6 +25,7 @@ perform_git_commit_and_push() {
 		echo "$COMMIT_OUTPUT"
 		echo "📤 Pushing to origin/$BRANCH..."
 		git push origin "$BRANCH"
+        echo ""
 		echo "✅ Successfully pushed to '$BRANCH' from $GIT_ROOT"
 	fi
 
