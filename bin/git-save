@@ -6,6 +6,7 @@ perform_git_commit_and_push() {
   git add -A
 
   read -p "Enter commit message: " COMMIT_MSG
+  echo ""
   if [[ -z "$COMMIT_MSG" ]]; then
     echo "❌ No commit message provided. Aborting."
     exit 1
@@ -19,7 +20,8 @@ perform_git_commit_and_push() {
 
   git commit -m "$COMMIT_MSG"
   git push origin "$BRANCH"
-  echo "✓ Successfully pushed to '$BRANCH' from $GIT_ROOT"
+  echo ""
+  echo "✅ Successfully pushed to '$BRANCH' from $GIT_ROOT"
 
   cd "$ORIGINAL_DIR"
 }
@@ -41,7 +43,7 @@ if [[ -n "$1" ]]; then
         exit 1
       fi
 
-      echo "✓ Switching to sibling repo: $repo"
+      echo "✅ Switching to sibling repo: $repo"
       cd "$TARGET_REPO_PATH"
       GIT_ROOT=$(git rev-parse --show-toplevel)
       perform_git_commit_and_push
