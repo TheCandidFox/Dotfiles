@@ -2,55 +2,67 @@
 
 # --- Function: Shared Git Commit + Push ---
 perform_git_commit_and_push() {
-  cd "$GIT_ROOT"
-  git add -A
+	cd "$GIT_ROOT"
 
-  read -p "Enter commit message: " COMMIT_MSG
-  echo ""
-  if [[ -z "$COMMIT_MSG" ]]; then
-    echo "❌ No commit message provided. Aborting."
-    exit 1
-  fi
+	# --- Detect current branch ---
+	BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 
-  BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
-  if [[ -z "$BRANCH" ]]; then
-    echo "❌ Failed to detect Git branch."
-    exit 1
-  fi
+	# --- Step 1: Add all changes (including deletions) ---
+	git add -A
 
-  git commit -m "$COMMIT_MSG"
-  git push origin "$BRANCH"
-  echo ""
-  echo "✅ Successfully pushed to '$BRANCH' from $GIT_ROOT"
+	# --- Step 2: Prompt for commit message ---
+	read -rp "Enter commit message: " COMMIT_MSG
+	[[ -z "$COMMIT_MSG" ]] && echo "❌ Commit message cannot be empty." && exit 1
 
-  cd "$ORIGINAL_DIR"
+	# --- Step 3: Attempt commit ---
+	COMMIT_OUTPUT=$(git commit -m "$COMMIT_MSG" 2>&1)
+
+	if echo "$COMMIT_OUTPUT" | grep -q "nothing to commit"; then
+		echo "✅ No changes required – working tree clean."
+	else
+		echo "$COMMIT_OUTPUT"
+		echo "📤 Pushing to origin/$BRANCH..."
+		git push origin "$BRANCH"
+		echo "✅ Successfully pushed to '$BRANCH' from $GIT_ROOT"
+	fi
+
+	cd "$ORIGINAL_DIR"
 }
 
 # --- Step 0: Setup ---
-NO_VENV_REPOS=("dotfiles" "Template")
+REPOS_WITH_PERMISSIBLE_SHORTCUTS=("dotfiles" "Template")
 ORIGINAL_DIR="$PWD"
 
-# --- Step 1: Shortcut for no-venv repos ---
+# --- Step 1: Shortcut for permissible shortcut repos ---
 if [[ -n "$1" ]]; then
-  clean_arg=$(basename "$1")
-  for repo in "${NO_VENV_REPOS[@]}"; do
-    if [[ "$clean_arg" == "$repo" ]]; then
-      REPO_PARENT=$(git rev-parse --show-toplevel | xargs dirname)
-      TARGET_REPO_PATH="$REPO_PARENT/$repo"
+	clean_arg=$(basename "$1")
+	for repo in "${REPOS_WITH_PERMISSIBLE_SHORTCUTS[@]}"; do
+		if [[ "$clean_arg" == "$repo" ]]; then
+            REPO_PARENT=$(git rev-parse --show-toplevel | xargs dirname)
+            TARGET_REPO_PATH="$REPO_PARENT/$repo"
 
-      if [[ ! -d "$TARGET_REPO_PATH/.git" ]]; then
-        echo "❌ '$repo' is not a valid Git repo at: $TARGET_REPO_PATH"
-        exit 1
-      fi
+            if [[ ! -d "$TARGET_REPO_PATH/.git" ]]; then
+                echo "❌ '$repo' is not a valid Git repo at: $TARGET_REPO_PATH"
+                exit 1
+            fi
 
-      echo "✅ Switching to sibling repo: $repo"
-      cd "$TARGET_REPO_PATH"
-      GIT_ROOT=$(git rev-parse --show-toplevel)
-      perform_git_commit_and_push
-      cd "$ORIGINAL_DIR"
-      exit 0
-    fi
-  done
+            cd "$TARGET_REPO_PATH"
+
+            if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+                echo "❌ Failed to enter a valid Git repo at: $TARGET_REPO_PATH"
+                exit 1
+            fi
+
+            echo "✅ Switching to sibling repo: $repo"
+            GIT_ROOT=$(git rev-parse --show-toplevel)
+            perform_git_commit_and_push
+            cd "$ORIGINAL_DIR"
+            exit 0
+		fi
+	done
+
+    echo "❌ '$1' is not a recognized shortcut repo."
+    exit 1
 fi
 
 # --- Step 2: Confirm inside Git repo ---
