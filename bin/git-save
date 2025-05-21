@@ -1,0 +1,107 @@
+#!/bin/bash
+
+# --- Function: Shared Git Commit + Push ---
+perform_git_commit_and_push() {
+  cd "$GIT_ROOT"
+  git add -A
+
+  read -p "Enter commit message: " COMMIT_MSG
+  if [[ -z "$COMMIT_MSG" ]]; then
+    echo "❌ No commit message provided. Aborting."
+    exit 1
+  fi
+
+  BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+  if [[ -z "$BRANCH" ]]; then
+    echo "❌ Failed to detect Git branch."
+    exit 1
+  fi
+
+  git commit -m "$COMMIT_MSG"
+  git push origin "$BRANCH"
+  echo "✓ Successfully pushed to '$BRANCH' from $GIT_ROOT"
+
+  cd "$ORIGINAL_DIR"
+}
+
+# --- Step 0: Setup ---
+NO_VENV_REPOS=("dotfiles" "Template")
+ORIGINAL_DIR="$PWD"
+
+# --- Step 1: Shortcut for no-venv repos ---
+if [[ -n "$1" ]]; then
+  clean_arg=$(basename "$1")
+  for repo in "${NO_VENV_REPOS[@]}"; do
+    if [[ "$clean_arg" == "$repo" ]]; then
+      REPO_PARENT=$(git rev-parse --show-toplevel | xargs dirname)
+      TARGET_REPO_PATH="$REPO_PARENT/$repo"
+
+      if [[ ! -d "$TARGET_REPO_PATH/.git" ]]; then
+        echo "❌ '$repo' is not a valid Git repo at: $TARGET_REPO_PATH"
+        exit 1
+      fi
+
+      echo "✓ Switching to sibling repo: $repo"
+      cd "$TARGET_REPO_PATH"
+      GIT_ROOT=$(git rev-parse --show-toplevel)
+      perform_git_commit_and_push
+      cd "$ORIGINAL_DIR"
+      exit 0
+    fi
+  done
+fi
+
+# --- Step 2: Confirm inside Git repo ---
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+  echo "❌ Not inside a Git repository. Aborting."
+  exit 1
+fi
+
+# --- Step 3: Virtual environment check ---
+if [[ -z "$VIRTUAL_ENV" ]]; then
+  echo "⚠️ No active virtual environment detected."
+  read -p "Continue without pip freeze and just push Git changes? (y/n): " choice
+  [[ "$choice" == "y" ]] || exit 1
+  SKIP_PIP_FREEZE=true
+fi
+
+# --- Step 4: Metadata guardrails + pip freeze ---
+if [[ -z "$SKIP_PIP_FREEZE" ]]; then
+  REQUIREMENTS_DIR=$(dirname "$VIRTUAL_ENV")
+  REQUIREMENTS_FILE="$REQUIREMENTS_DIR/requirements.txt"
+
+  if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
+    echo "❌ No requirements.txt found in: $REQUIREMENTS_DIR"
+    exit 1
+  fi
+
+  META_LINE=$(grep '^# venv:' "$REQUIREMENTS_FILE")
+  if [[ -z "$META_LINE" ]]; then
+    echo "❌ requirements.txt missing metadata: '# venv: module_name'"
+    echo "Example: # venv: $(basename "$REQUIREMENTS_DIR")"
+    exit 1
+  fi
+
+  META_PATH=$(echo "$META_LINE" | cut -d':' -f2- | xargs)
+  EXPECTED_META=$(basename "$REQUIREMENTS_DIR")
+
+  if [[ "$META_PATH" != "$EXPECTED_META" ]]; then
+    echo "❌ Mismatch detected:"
+    echo "  requirements.txt metadata: $META_PATH"
+    echo "  active virtualenv folder:  $EXPECTED_META"
+    exit 1
+  fi
+
+  # Backup and update
+  cp "$REQUIREMENTS_FILE" "${REQUIREMENTS_FILE}.bak.$(date +%s)"
+  {
+    echo "# venv: $EXPECTED_META"
+    echo "# updated: $(date +%Y-%m-%d)"
+    pip freeze
+  } > "$REQUIREMENTS_FILE"
+
+  echo "✓ requirements.txt updated safely at: $REQUIREMENTS_FILE"
+fi
+
+# --- Step 5: Shared Git logic ---
+perform_git_commit_and_push
